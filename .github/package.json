@@ -1,0 +1,15 @@
+{
+  "name": "Test-Login",
+  "version": "1.0.0",
+  "description": "Playwright + Percy visual testing",
+  "scripts": {
+    "test": "playwright test",
+    "test:percy": "percy exec -- playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@percy/cli": "^1.27.0",
+    "@percy/playwright": "^1.1.0",
+    "playwright": "^1.40.0"
+  }
+}
