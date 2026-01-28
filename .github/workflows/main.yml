@@ -1,32 +1,78 @@
-name: Percy Visual Tests
+name: Visual Regression Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, master]
   pull_request:
-    branches: [ main ]
+    branches: [main, master]
 
 jobs:
   visual-tests:
+    name: 'Playwright + Percy Visual Tests'
     runs-on: ubuntu-latest
-
+    
+    env:
+      PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
+      NODE_VERSION: '20'
+      
     steps:
-      - name: Checkout code
+      # 1. 检出代码（包含锁文件）
+      - name: Checkout repository
         uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0  # 获取完整历史记录
+      
+      # 2. 设置 Node.js 和缓存
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
-          cache: 'npm'
-
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'  # 自动检测使用 npm 或 yarn
+      
+      # 3. 验证锁文件是否存在
+      - name: Verify lock file exists
+        id: check-lock
+        run: |
+          if [ -f "package-lock.json" ]; then
+            echo "lock-file=npm" >> $GITHUB_OUTPUT
+            echo "Using npm lock file"
+          elif [ -f "yarn.lock" ]; then
+            echo "lock-file=yarn" >> $GITHUB_OUTPUT
+            echo "Using yarn lock file"
+          else
+            echo "No lock file found. Generating one..."
+            npm init -y  # 如果项目没有 package.json，先创建
+            npm install --save-dev @playwright/test @percy/cli @percy/playwright playwright
+            echo "lock-file=npm" >> $GITHUB_OUTPUT
+          fi
+      
+      # 4. 根据锁文件类型安装依赖
       - name: Install dependencies
-        run: npm ci
-
+        run: |
+          if [ "${{ steps.check-lock.outputs.lock-file }}" = "npm" ]; then
+            npm ci --no-audit  # 使用 npm ci 确保精确安装
+          else
+            yarn install --frozen-lockfile
+          fi
+      
+      # 5. 安装 Playwright 浏览器
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
+        run: npx playwright install --with-deps chromium
+      
+      # 6. 运行 Percy 测试
       - name: Run Percy visual tests
-        run: npx percy exec -- npx playwright test
+        run: |
+          npx percy exec -- npx playwright test
         env:
-          PERCY_TOKEN:  $ {{web_0a0a2bf8a15750f20b0c5b0ff3ce9f451c1ea07ef8186203f334f65a1c8a6d58}}
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
+      
+      # 7. 上传测试报告
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results.json
+            .percy.yml
